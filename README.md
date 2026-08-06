@@ -1,0 +1,368 @@
+# PeoplePulse
+
+PeoplePulse is a local-first, governed people analytics data platform. It turns
+deterministic synthetic employee lifecycle records into effective-dated
+dimensions, workforce facts, tested analytics marts, typed APIs, and an
+executive dashboard.
+
+This repository implements the complete employee-lifecycle vertical slice:
+generation, multi-format ingestion, idempotent raw loading, dead-letter handling,
+dbt transformations, SCD Type 2 employee history, hires/terminations/monthly
+snapshots, quality gates, Airflow orchestration, warehouse-backed API metrics,
+and Streamlit reporting. Additional recruitment, mobility, diversity,
+compensation, and learning API contracts use an explicit deterministic demo
+adapter until their source facts are added.
+
+> All identities are fictional. Synthetic employee rows are still classified
+> and protected as if they were real.
+
+![Illustrative PeoplePulse dashboard preview](docs/assets/dashboard-preview.svg)
+
+The preview is an illustrative placeholder; `make demo` renders the live
+dashboard from the API.
+
+## Why this project exists
+
+People analytics is often slowed by disconnected HR systems, overwritten
+history, inconsistent metric definitions, and overly broad access to employee
+data. PeoplePulse demonstrates a compact enterprise pattern:
+
+- source-faithful, replayable ingestion with checkpoints and reconciliation;
+- layered SQL transformations with documented grain and lineage;
+- historical workforce state through SCD Type 2;
+- aggregate-first access that keeps PII out of analyst responses and logs;
+- observable, retryable pipelines with critical publication gates;
+- a free local PostgreSQL path and a cost-governed Snowflake adapter.
+
+## Architecture
+
+```mermaid
+flowchart LR
+    subgraph Sources
+      HRIS[HRIS CSV / JSON]
+      PG[(PostgreSQL source)]
+      REST[REST contract]
+    end
+
+    GEN[Deterministic Python generator] --> HRIS
+    HRIS --> INGEST[Connector-based ingestion]
+    PG --> INGEST
+    REST --> INGEST
+
+    AIRFLOW[Apache Airflow] --> INGEST
+    AIRFLOW --> DBT[dbt]
+    AIRFLOW --> QUALITY[Quality gates]
+
+    INGEST --> RAW[(Raw + audit PostgreSQL)]
+    RAW --> STG[Staging]
+    STG --> INT[Intermediate]
+    INT --> CORE[Core SCD dimensions + facts]
+    CORE --> MARTS[Aggregate marts]
+    QUALITY --> AUDIT[(Quality + audit store)]
+
+    MARTS --> API[FastAPI]
+    API --> DASH[Streamlit]
+    API --> USERS[Analysts / executives]
+    DASH --> USERS
+```
+
+See [architecture](docs/architecture/overview.md),
+[lineage](docs/architecture/data-flow.md), and
+[performance design](docs/architecture/performance.md).
+
+## What is implemented
+
+| Capability | Implementation |
+|---|---|
+| Synthetic sources | Deterministic departments, employees, hire and termination events in CSV and JSON; baseline, rapid hiring, hiring freeze, increased attrition, duplicates, missing keys/references, invalid/future dates, schema drift, out-of-order and repeated-batch scenarios |
+| Connectors | Shared `SourceConnector` protocol; CSV, JSON, PostgreSQL, and REST implementations with schema/checkpoint contracts |
+| Raw ingestion | Streaming extraction, typed validation, schema-drift events, record hashes, transaction-scoped loads, idempotent duplicates, batch metadata, redacted/restricted dead letters, reconciliation, file checkpoints |
+| Warehouse | `raw_hris` → staging → intermediate → core → marts; employee SCD2, department dimension, hire/termination/monthly snapshot facts, headcount/attrition/workforce/quality/pipeline marts |
+| Data quality | Null, uniqueness, relationships, employment dates, duplicate rate, volume change, reconciliation, SCD current/range, fact/date and dbt model tests |
+| Orchestration | Separate ingestion, transformation, quality, and end-to-end Airflow DAGs with retry backoff, timeouts, bounded concurrency, safe failure logs, manual replay/backfill contracts |
+| API | Live/ready/dependency health; workforce, pipeline, quality, catalog, lineage and classification routes; allow-listed filters, pagination, request IDs, RFC 7807 errors, direct mart queries for the vertical slice |
+| Dashboard | Executive overview, headcount, attrition, recruitment, pipeline health, quality, and governance pages; cached aggregate API client; no direct raw access |
+| Governance | Field classification and masking, aggregate-only analytics boundary, role-protected local admin operations, access-audit schema, Snowflake tags/masking/roles |
+| Delivery | Python 3.12 containers, PostgreSQL 16, Docker Compose health checks, non-root app runtime, Ruff/Mypy/Pytest/dbt CI, Dependabot, secret and vulnerability scans |
+
+## Quick start
+
+Requirements: Docker Engine with Compose v2 and roughly 8 GB free memory. No
+paid service or Snowflake account is required.
+
+Linux/macOS:
+
+```bash
+cp .env.example .env
+make demo
+```
+
+Windows PowerShell (GNU Make is not required):
+
+```powershell
+Copy-Item .env.example .env
+.\scripts\demo.ps1
+```
+
+The demo starts:
+
+| Service | URL | Local credential |
+|---|---|---|
+| FastAPI docs | <http://localhost:8000/docs> | Public aggregate reads |
+| Streamlit | <http://localhost:8501> | Public aggregate reads |
+| Airflow | <http://localhost:8080> | `admin` / `admin` |
+| Warehouse | `localhost:5434/people_warehouse` | `peoplepulse` / `peoplepulse` |
+| Source simulator | `localhost:5433/people_source` | `peoplepulse` / `peoplepulse` |
+
+Local defaults are intentionally obvious and must never be reused outside an
+isolated development environment.
+
+### Verify the running demo
+
+```bash
+curl http://localhost:8000/health/live
+curl http://localhost:8000/health/dependencies
+curl http://localhost:8000/api/v1/workforce/summary
+curl http://localhost:8000/api/v1/workforce/headcount
+curl http://localhost:8000/api/v1/workforce/attrition
+docker compose ps
+```
+
+The demo also ingests one isolated invalid employee source batch. The employee
+row is rejected, the reason is audited, and accepted rows continue through dbt.
+
+## Repository map
+
+```text
+airflow/            TaskFlow DAGs and DAG contract tests
+api/                FastAPI routes, schemas, services, repositories, middleware
+dashboard/          Streamlit pages, chart/layout components, cached API client
+data_generator/     Deterministic HRIS source generator and scenarios
+dbt/                Sources, staging, intermediate, core, marts, tests, snapshot
+ingestion/          Connectors, validation, loaders, checkpoints, reconciliation
+peoplepulse/        Shared errors, settings/logging, quality, governance, metrics
+infrastructure/     Container images, PostgreSQL bootstrap, Snowflake controls
+scripts/            Demo, cleanup, CI bootstrap, and benchmark utilities
+docs/               Architecture, ADRs, runbooks, dictionary, demo/interview guide
+tests/              Unit, integration, and vertical-slice tests
+```
+
+## Generator and ingestion
+
+Create a repeatable scenario:
+
+```bash
+python -m data_generator.generate \
+  --employees 10000 \
+  --months 36 \
+  --scenario increased_attrition \
+  --seed 42 \
+  --output-dir sample_data/generated
+```
+
+Load CSV records into PostgreSQL:
+
+```bash
+python -m ingestion.cli load \
+  --input-dir sample_data/generated \
+  --database-url postgresql://peoplepulse:peoplepulse@localhost:5434/people_warehouse
+```
+
+Run the same command again to demonstrate idempotency. Reconciliation uses:
+
+```text
+extracted = loaded + rejected + duplicate
+```
+
+Checkpoints commit only after the raw load and audit metadata commit.
+
+## Warehouse model
+
+The core vertical slice contains:
+
+- `core.dim_department`
+- `core.dim_employee` (SCD Type 2)
+- `core.fact_hire`
+- `core.fact_termination`
+- `core.fact_employee_snapshot`
+- `marts.mart_headcount`
+- `marts.mart_attrition`
+- `marts.mart_workforce_summary`
+- `marts.mart_data_quality_summary`
+- `marts.mart_pipeline_health`
+
+`dim_employee` tracks department, manager, job, level, location, and employment
+status with `employee_sk`, `valid_from`, `valid_to`, `is_current`,
+`record_hash`, `loaded_at`, and `source_system`. Tests enforce one current row
+and non-overlapping half-open effective ranges.
+
+Full grains, definitions, owners, classifications, and caveats are in the
+[data dictionary](docs/data_dictionary/warehouse.md).
+
+## API
+
+Core routes:
+
+```text
+GET /health/live
+GET /health/ready
+GET /health/dependencies
+GET /api/v1/workforce/{summary,headcount,attrition,hiring,mobility,diversity,compensation,learning}
+GET /api/v1/pipelines
+GET /api/v1/pipelines/runs
+GET /api/v1/pipelines/runs/{run_id}
+GET /api/v1/data-quality
+GET /api/v1/data-quality/{check_id}
+GET /api/v1/governance/{catalog,lineage,classifications}
+POST /api/v1/admin/{generate-data,trigger-ingestion,trigger-transformation,reprocess-rejected}
+```
+
+Workforce filters include date range, department, location, job level, legal
+entity, employment type, and work arrangement. User values are bind parameters;
+sort/filter fields are allow-listed. Summary, headcount, and attrition query dbt
+marts. Expanded-domain routes fall back to labelled deterministic demo aggregates
+until their facts are implemented.
+
+Admin demo request:
+
+```bash
+curl -X POST http://localhost:8000/api/v1/admin/trigger-ingestion \
+  -H "Authorization: Bearer local-admin-change-me"
+```
+
+## Airflow operations
+
+```bash
+# Manual end-to-end run
+docker compose exec airflow-scheduler \
+  airflow dags trigger people_data_end_to_end
+
+# Bounded backfill
+docker compose exec airflow-scheduler \
+  airflow dags backfill people_data_ingestion -s 2026-07-01 -e 2026-07-07
+
+# Test one task
+docker compose exec airflow-scheduler \
+  airflow tasks test people_data_ingestion validate_source_availability 2026-07-29
+
+# Inspect states and logs
+docker compose exec airflow-scheduler \
+  airflow tasks states-for-dag-run people_data_ingestion <run-id>
+```
+
+Safe clearing and incident steps are in the
+[Airflow recovery runbook](docs/runbooks/airflow-recovery.md).
+
+## Security and governance
+
+- Raw employee access is loader/transformer-only; analyst access begins at
+  aggregate marts.
+- Names, contact details, date of birth, employee ID, and pay are restricted or
+  confidential and centrally masked for unprivileged roles.
+- Logs, metrics labels, errors, and XCom values omit employee values and raw
+  payloads.
+- Configuration comes from validated environment settings; `.env` and generated
+  data are ignored.
+- Snowflake setup includes least-privilege roles, separate warehouses, tags,
+  masking policies, secure-view guidance, and a monthly resource monitor.
+
+The local bearer-token mechanism demonstrates authorization policy; production
+requires an identity provider, TLS, managed secrets, and centralized immutable
+audit logs. See [SECURITY.md](SECURITY.md).
+
+## Quality and verification
+
+Host development:
+
+```bash
+python -m venv .venv
+source .venv/bin/activate          # Windows: .\.venv\Scripts\Activate.ps1
+python -m pip install -e ".[dev,dbt]"
+
+ruff format --check .
+ruff check .
+mypy .
+pytest
+
+cd dbt
+dbt deps
+dbt parse --target local
+dbt compile --target local
+dbt seed --target local
+dbt run --target local
+dbt test --target local
+```
+
+Container checks:
+
+```bash
+docker compose config --quiet
+docker compose build
+docker compose run --rm test
+```
+
+CI repeats formatting, linting, strict typing, coverage, dbt parsing/build/tests,
+Compose validation, image builds, secret scanning, and dependency vulnerability
+scanning. No command is described as passing unless its result is reported in the
+delivery notes for that run.
+
+## Snowflake
+
+Snowflake is optional and is not used in local CI. Review
+[`infrastructure/snowflake/setup.sql`](infrastructure/snowflake/setup.sql), set
+the `SNOWFLAKE_*` environment variables, and run:
+
+```bash
+dbt debug --project-dir dbt --profiles-dir dbt --target snowflake
+dbt build --project-dir dbt --profiles-dir dbt --target snowflake
+```
+
+The baseline uses isolated `XSMALL` warehouses, auto-suspend, query tagging, a
+resource monitor, restricted schema grants, dynamic masking, and zero-copy clone
+guidance. Values must be reviewed against the target account.
+
+## Demo and interview material
+
+- [Exact five-minute demo and narration](docs/demo-script.md)
+- [Architecture/trade-off interview guide](docs/interview_notes/guide.md)
+- [Architecture decisions](docs/adr/)
+- [Operational runbooks](docs/runbooks/)
+
+## Known limitations
+
+- Only employee, department, hire, and termination source facts are loaded end to
+  end. Expanded workforce domains currently expose labelled deterministic demo
+  aggregates through the same typed API contracts.
+- Local authentication is a deliberately simple bearer-token role simulation.
+- The Snowflake adapter has no supplied account credentials and therefore
+  requires deployment verification.
+- Streamlit is suitable for the MVP, not a high-concurrency enterprise semantic
+  layer.
+- Synthetic distributions are useful for engineering tests, not fairness,
+  causal, regulatory, or workforce-policy conclusions.
+- Million-row benchmarks are opt-in and depend on local hardware.
+
+## Roadmap
+
+1. Add ATS stages/offers and recruitment funnel/time-to-hire facts.
+2. Add compensation, learning, performance, and movement histories.
+3. Replace local tokens with OIDC and purpose-aware authorization.
+4. Publish OpenLineage events and Prometheus/Grafana operational dashboards.
+5. Qualify Snowflake incremental strategies and masking policies in a real
+   account, then automate deployment with infrastructure as code.
+
+## Resume-ready summary
+
+- Built a local-first people analytics data platform using Python, SQL, dbt,
+  Airflow, PostgreSQL, FastAPI, Streamlit, and Docker, transforming synthetic
+  employee lifecycle data into governed dimensional models and aggregate marts.
+- Implemented deterministic multi-format generation, connector-based ingestion,
+  idempotent hashing, checkpoints, transactional batch metadata, dead-letter
+  handling, reconciliation, and SCD Type 2 employee history.
+- Developed typed, filterable workforce APIs and an executive dashboard for
+  headcount, attrition, hiring, pipeline health, quality, and governance while
+  keeping employee PII out of analytics responses and logs.
+- Designed an optional Snowflake adapter with least-privilege roles, separated
+  warehouses, masking/tagging policy, query attribution, auto-suspend, and
+  resource-monitor cost controls.
+

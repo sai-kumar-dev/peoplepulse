@@ -1,0 +1,85 @@
+version: 2
+
+sources:
+  - name: hris
+    description: >
+      Append-only landing tables loaded from the synthetic HR information system.
+      Raw records may contain repeated deliveries; staging models select one record
+      per business version using the ingestion timestamp and batch identifier.
+    schema: "{{ var('raw_hris_schema', 'RAW' if target.type == 'snowflake' else 'raw_hris') }}"
+    loader: peoplepulse_ingestion
+    loaded_at_field: _ingested_at
+    freshness:
+      warn_after: {count: 24, period: hour}
+      error_after: {count: 48, period: hour}
+      filter: "_ingested_at >= current_timestamp - interval '7 day'"
+    meta:
+      owner: people-analytics-data-engineering
+      contains_pii: true
+      data_classification: restricted
+    tables:
+      - name: departments
+        description: Department reference records from HRIS.
+        columns:
+          - name: department_id
+            description: HRIS department business key.
+            tests:
+              - not_null
+          - name: _ingested_at
+            description: UTC timestamp at which the raw record was committed.
+            tests:
+              - not_null
+          - name: _batch_id
+            description: Identifier of the idempotent ingestion batch.
+            tests:
+              - not_null
+
+      - name: employees
+        description: >
+          Mutable employee master records. Names, contact details, and date of
+          birth are restricted PII and must not be exposed from analytics marts.
+        columns:
+          - name: employee_id
+            description: Employee business key assigned by HRIS.
+            tests:
+              - not_null
+          - name: _ingested_at
+            description: UTC timestamp at which the raw record was committed.
+            tests:
+              - not_null
+          - name: _batch_id
+            description: Identifier of the idempotent ingestion batch.
+            tests:
+              - not_null
+
+      - name: hires
+        description: Employee hire and rehire lifecycle events.
+        columns:
+          - name: hire_event_id
+            description: Stable identifier of a hire event.
+            tests:
+              - not_null
+          - name: employee_id
+            description: Employee business key involved in the event.
+            tests:
+              - not_null
+          - name: _ingested_at
+            description: UTC timestamp at which the raw record was committed.
+            tests:
+              - not_null
+
+      - name: terminations
+        description: Employee termination lifecycle events.
+        columns:
+          - name: termination_event_id
+            description: Stable identifier of a termination event.
+            tests:
+              - not_null
+          - name: employee_id
+            description: Employee business key involved in the event.
+            tests:
+              - not_null
+          - name: _ingested_at
+            description: UTC timestamp at which the raw record was committed.
+            tests:
+              - not_null

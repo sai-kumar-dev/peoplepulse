@@ -1,0 +1,7 @@
+termination_type,is_voluntary,description
+voluntary,true,Employee-initiated separation
+involuntary,false,Employer-initiated separation
+retirement,true,Retirement separation
+other,false,Other or unclassified separation
+unknown,false,Unrecognized source value
+

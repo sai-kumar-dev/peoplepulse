@@ -1,0 +1,121 @@
+version: 2
+
+models:
+  - name: int_employee_history
+    description: >
+      Reusable employee SCD preparation. Repeated deliveries of the same source
+      version are collapsed in staging, the first version begins on hire date when
+      appropriate, and each range is represented as [valid_from, valid_to).
+    meta:
+      owner: people-analytics-data-engineering
+      refresh_frequency: hourly
+      data_classification: restricted
+      contains_pii: true
+      grain: employee_id + source_version_at
+    tests:
+      - unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [employee_id, source_version_at]
+      - valid_employment_dates:
+          arguments:
+            hire_date_column: hire_date
+            termination_date_column: termination_date
+      - single_current_record:
+          arguments:
+            business_key: employee_id
+            is_current_column: is_current
+      - no_overlapping_scd_ranges:
+          arguments:
+            business_key: employee_id
+            valid_from_column: valid_from
+            valid_to_column: valid_to
+    columns:
+      - name: employee_id
+        description: Employee business key.
+        tests: [not_null]
+      - name: valid_from
+        description: Inclusive UTC timestamp at which this employee version became valid.
+        tests: [not_null]
+      - name: source_version_at
+        description: Stable source timestamp identifying the raw business version.
+        tests: [not_null]
+      - name: valid_to
+        description: Exclusive UTC timestamp at which this version stopped being valid; null for current.
+      - name: is_current
+        description: True only for the latest employee version.
+        tests:
+          - accepted_values:
+              arguments:
+                values: [true, false]
+                quote: false
+      - name: record_hash
+        description: Hash used to detect material attribute changes.
+        tests: [not_null]
+      - name: loaded_at
+        description: UTC timestamp of the selected source delivery.
+        tests: [not_null]
+      - name: department_id
+        description: Department assignment effective during this range.
+      - name: manager_employee_id
+        description: Manager assignment effective during this range.
+      - name: job_id
+        description: Job assignment effective during this range.
+      - name: job_level
+        description: Job-level assignment effective during this range.
+      - name: location_id
+        description: Location assignment effective during this range.
+      - name: employment_status
+        description: Employment status effective during this range.
+
+  - name: int_current_employee_state
+    description: >
+      Exactly one latest normalized HRIS state per employee, used by operational
+      transformations that do not require a point-in-time join.
+    meta:
+      owner: people-analytics-data-engineering
+      refresh_frequency: hourly
+      data_classification: restricted
+      contains_pii: true
+      grain: employee_id
+    columns:
+      - name: employee_id
+        description: Employee business key.
+        tests: [not_null, unique]
+      - name: valid_from
+        description: Timestamp at which the current version became effective.
+        tests: [not_null]
+      - name: record_hash
+        description: Current normalized employee attribute hash.
+        tests: [not_null]
+
+  - name: int_attrition_events
+    description: >
+      Termination events enriched with the employee assignment valid on the
+      termination date. Event-supplied department takes precedence over history.
+    meta:
+      owner: people-analytics-data-engineering
+      refresh_frequency: hourly
+      data_classification: confidential
+      grain: termination_event_id
+    tests:
+      - valid_employment_dates:
+          arguments:
+            hire_date_column: hire_date
+            termination_date_column: termination_date
+    columns:
+      - name: termination_event_id
+        description: Stable termination event identifier.
+        tests: [not_null, unique]
+      - name: employee_id
+        description: Employee business key.
+        tests: [not_null]
+      - name: termination_date
+        description: Business-effective termination date.
+        tests: [not_null]
+      - name: tenure_days_at_termination
+        description: Completed days from the applicable hire date through termination.
+        tests:
+          - non_negative
+      - name: is_voluntary
+        description: Whether the separation was employee initiated.
+        tests: [not_null]

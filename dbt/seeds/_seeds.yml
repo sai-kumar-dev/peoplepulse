@@ -1,0 +1,40 @@
+version: 2
+
+seeds:
+  - name: employment_status_reference
+    description: Governed interpretation of normalized employee statuses.
+    config:
+      column_types:
+        employment_status: varchar(32)
+        is_headcount_status: boolean
+        is_terminal_status: boolean
+        display_order: integer
+    columns:
+      - name: employment_status
+        description: Canonical employee status code.
+        tests:
+          - unique
+          - not_null
+      - name: is_headcount_status
+        description: Whether the status normally contributes to workforce headcount.
+        tests:
+          - not_null
+
+  - name: termination_type_reference
+    description: Governed interpretation of normalized termination categories.
+    config:
+      column_types:
+        termination_type: varchar(32)
+        is_voluntary: boolean
+        description: varchar(256)
+    columns:
+      - name: termination_type
+        description: Canonical termination category.
+        tests:
+          - unique
+          - not_null
+      - name: is_voluntary
+        description: Whether the category is normally employee initiated.
+        tests:
+          - not_null
+

@@ -1,0 +1,359 @@
+version: 2
+
+models:
+  - name: dim_department
+    description: >
+      Current conformed department dimension. The explicit __UNKNOWN__ member
+      supports late-arriving and unresolved department references without null
+      foreign keys.
+    meta:
+      owner: people-analytics-data-engineering
+      refresh_frequency: daily
+      data_classification: internal
+      grain: department_sk
+      materialization_reason: Incremental upsert limits reference-data rewrite cost.
+    columns:
+      - name: department_sk
+        description: Stable hash surrogate key derived from department_id.
+        tests: [not_null, unique]
+      - name: department_id
+        description: HRIS department business key or __UNKNOWN__.
+        tests: [not_null, unique]
+      - name: department_name
+        description: Business-facing department name.
+        tests: [not_null]
+      - name: parent_department_id
+        description: Parent department business key for hierarchy traversal.
+      - name: cost_center_id
+        description: Current cost-center assignment.
+      - name: record_hash
+        description: Normalized source attribute hash.
+        tests: [not_null]
+      - name: loaded_at
+        description: UTC source load timestamp, or model time for the unknown member.
+        tests: [not_null]
+      - name: source_system
+        description: Originating source system.
+        tests: [not_null]
+
+  - name: dim_employee
+    description: >
+      Restricted SCD Type 2 employee dimension. Department, manager, job, level,
+      location, and employment status changes open new half-open effective ranges.
+      Contact values are one-way hashed; direct names remain restricted for
+      authorized operational use and are never propagated to analytics marts.
+    meta:
+      owner: people-analytics-data-engineering
+      refresh_frequency: daily
+      data_classification: restricted
+      contains_pii: true
+      grain: employee_sk
+      scd_type: 2
+      caveat: Source updated_at is used as the effective time after the initial hire version.
+    tests:
+      - valid_employment_dates:
+          arguments:
+            hire_date_column: hire_date
+            termination_date_column: termination_date
+      - single_current_record:
+          arguments:
+            business_key: employee_id
+            is_current_column: is_current
+      - no_overlapping_scd_ranges:
+          arguments:
+            business_key: employee_id
+            valid_from_column: valid_from
+            valid_to_column: valid_to
+    columns:
+      - name: employee_sk
+        description: Version surrogate key derived from employee_id and stable source version timestamp.
+        tests: [not_null, unique]
+      - name: employee_id
+        description: Stable HRIS employee business key or __UNKNOWN__.
+        tests: [not_null]
+      - name: legal_entity_id
+        description: Employing legal entity effective for the version.
+      - name: first_name
+        description: Legal first name retained only in the restricted core schema.
+        meta: {sensitivity: restricted, pii: true}
+      - name: last_name
+        description: Legal last name retained only in the restricted core schema.
+        meta: {sensitivity: restricted, pii: true}
+      - name: preferred_name
+        description: Preferred name retained only in the restricted core schema.
+        meta: {sensitivity: restricted, pii: true}
+      - name: birth_year
+        description: Birth year derived from date of birth; still confidential demographic data.
+        meta: {sensitivity: confidential, pii: true}
+      - name: gender
+        description: Normalized gender category for governed aggregate analysis.
+        meta: {sensitivity: confidential, pii: true}
+      - name: email_hash
+        description: Deterministic pseudonymous hash; not suitable as encryption.
+        meta: {sensitivity: confidential, pii: true}
+        tests: [not_null]
+      - name: phone_hash
+        description: Deterministic pseudonymous hash; not suitable as encryption.
+        meta: {sensitivity: confidential, pii: true}
+        tests: [not_null]
+      - name: hire_date
+        description: Start of the current employment spell.
+      - name: termination_date
+        description: End of the current employment spell, when applicable.
+      - name: employment_status
+        description: Lifecycle status effective during this version.
+        tests:
+          - accepted_values:
+              arguments:
+                values: [active, leave, terminated, inactive, unknown]
+      - name: employment_type
+        description: Employment relationship effective during this version.
+      - name: manager_employee_id
+        description: Manager business key effective during this version.
+      - name: department_sk
+        description: Resolved conformed department key; unresolved references use unknown.
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_department')
+                field: department_sk
+      - name: department_id
+        description: Original department business key retained for reconciliation.
+      - name: job_id
+        description: Job assignment effective during this version.
+      - name: job_level
+        description: Job-level assignment effective during this version.
+      - name: location_id
+        description: Location assignment effective during this version.
+      - name: cost_center_id
+        description: Cost-center assignment effective during this version.
+      - name: worker_category
+        description: Worker category effective during this version.
+      - name: work_arrangement
+        description: Work arrangement effective during this version.
+      - name: valid_from
+        description: Inclusive UTC effective timestamp.
+        tests: [not_null]
+      - name: source_version_at
+        description: Stable source timestamp used in the version surrogate key.
+        tests: [not_null]
+      - name: valid_to
+        description: Exclusive UTC effective timestamp; null denotes current.
+      - name: is_current
+        description: True only for the latest version of a business key.
+        tests:
+          - accepted_values:
+              arguments:
+                values: [true, false]
+                quote: false
+      - name: record_hash
+        description: Hash of normalized mutable source attributes.
+        tests: [not_null]
+      - name: loaded_at
+        description: UTC source-ingestion timestamp.
+        tests: [not_null]
+      - name: source_system
+        description: Originating source system.
+        tests: [not_null]
+
+  - name: fact_hire
+    description: >
+      Additive hire and rehire event fact. Employee keys resolve to the SCD version
+      effective on hire_date; unresolved late dimensions use the unknown member.
+    meta:
+      owner: people-analytics-data-engineering
+      refresh_frequency: daily
+      data_classification: confidential
+      grain: hire_event_id
+    columns:
+      - name: hire_sk
+        description: Stable hire event surrogate key.
+        tests: [not_null, unique]
+      - name: hire_event_id
+        description: Source hire event business key.
+        tests: [not_null, unique]
+      - name: employee_sk
+        description: Effective employee dimension key.
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_employee')
+                field: employee_sk
+      - name: employee_id
+        description: Employee business key retained for reconciliation.
+        tests: [not_null]
+      - name: department_sk
+        description: Conformed department key at hire.
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_department')
+                field: department_sk
+      - name: hire_date
+        description: Business-effective event date.
+        tests: [not_null]
+      - name: hire_month
+        description: First day of the hire calendar month.
+        tests: [not_null]
+      - name: hire_type
+        description: New hire, rehire, conversion, acquisition, or unknown.
+      - name: hire_count
+        description: Additive measure fixed at one.
+        tests:
+          - accepted_values:
+              arguments:
+                values: [1]
+                quote: false
+      - name: record_hash
+        description: Hash used to reconcile event attributes.
+        tests: [not_null]
+      - name: loaded_at
+        description: UTC raw-ingestion timestamp.
+        tests: [not_null]
+
+  - name: fact_termination
+    description: >
+      Additive separation event fact enriched with effective employee attributes
+      and completed tenure at exit.
+    meta:
+      owner: people-analytics-data-engineering
+      refresh_frequency: daily
+      data_classification: confidential
+      grain: termination_event_id
+    columns:
+      - name: termination_sk
+        description: Stable termination event surrogate key.
+        tests: [not_null, unique]
+      - name: termination_event_id
+        description: Source termination event business key.
+        tests: [not_null, unique]
+      - name: employee_sk
+        description: Employee dimension key effective at separation.
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_employee')
+                field: employee_sk
+      - name: employee_id
+        description: Employee business key retained for reconciliation.
+        tests: [not_null]
+      - name: department_sk
+        description: Conformed department key at separation.
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_department')
+                field: department_sk
+      - name: termination_date
+        description: Business-effective separation date.
+        tests: [not_null]
+      - name: termination_month
+        description: First day of the separation calendar month.
+        tests: [not_null]
+      - name: termination_type
+        description: Canonical separation category.
+      - name: termination_reason
+        description: Sensitive source-provided separation reason.
+        meta: {sensitivity: confidential}
+      - name: is_voluntary
+        description: Whether the separation was employee initiated.
+        tests: [not_null]
+      - name: tenure_days_at_termination
+        description: Completed employment days at separation.
+        tests:
+          - non_negative
+      - name: termination_count
+        description: Additive measure fixed at one.
+        tests:
+          - accepted_values:
+              arguments:
+                values: [1]
+                quote: false
+      - name: loaded_at
+        description: UTC raw-ingestion timestamp.
+        tests: [not_null]
+
+  - name: fact_employee_snapshot
+    description: >
+      Periodic employee-state fact at one row per snapshot date and employee.
+      Re-running a date replaces that date's rows. Use --vars
+      '{"snapshot_date": "YYYY-MM-DD"}' for deterministic backfills.
+    meta:
+      owner: people-analytics-data-engineering
+      refresh_frequency: daily
+      data_classification: confidential
+      grain: snapshot_date + employee_id
+      caveat: A date exists only after the pipeline has captured or backfilled it.
+    tests:
+      - unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [snapshot_date, employee_id]
+    columns:
+      - name: employee_snapshot_sk
+        description: Stable snapshot row key derived from date and employee business key.
+        tests: [not_null, unique]
+      - name: snapshot_date
+        description: Calendar date represented by this snapshot.
+        tests: [not_null]
+      - name: employee_sk
+        description: Employee SCD version valid on the snapshot date.
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_employee')
+                field: employee_sk
+      - name: employee_id
+        description: Employee business key retained for reconciliation.
+        tests: [not_null]
+      - name: department_sk
+        description: Conformed department key on the snapshot date.
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_department')
+                field: department_sk
+      - name: headcount_count
+        description: One when employed and in an active or leave status; otherwise zero.
+        tests:
+          - accepted_values:
+              arguments:
+                values: [0, 1]
+                quote: false
+      - name: active_employee_count
+        description: One when source status is active.
+        tests:
+          - accepted_values:
+              arguments:
+                values: [0, 1]
+                quote: false
+      - name: leave_employee_count
+        description: One when source status is leave.
+        tests:
+          - accepted_values:
+              arguments:
+                values: [0, 1]
+                quote: false
+      - name: inactive_employee_count
+        description: One when source status is terminated or inactive.
+        tests:
+          - accepted_values:
+              arguments:
+                values: [0, 1]
+                quote: false
+      - name: tenure_days
+        description: Non-negative completed tenure as of snapshot date.
+        tests:
+          - non_negative
+      - name: employee_record_hash
+        description: Employee version hash retained for point-in-time reconciliation.
+        tests: [not_null]
+      - name: loaded_at
+        description: UTC time this snapshot row was built.
+        tests: [not_null]

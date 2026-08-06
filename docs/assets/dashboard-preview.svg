@@ -1,0 +1,103 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="675" viewBox="0 0 1200 675" role="img" aria-labelledby="title description">
+  <title id="title">Illustrative PeoplePulse executive dashboard</title>
+  <description id="description">A navy and teal dashboard preview with workforce KPI cards and aggregate charts.</description>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0b1733"/>
+      <stop offset="1" stop-color="#17264a"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#33d6c5"/>
+      <stop offset="1" stop-color="#65a7ff"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="675" rx="24" fill="url(#bg)"/>
+  <rect x="24" y="24" width="220" height="627" rx="18" fill="#101f3f"/>
+  <circle cx="57" cy="65" r="13" fill="#33d6c5"/>
+  <text x="82" y="74" font-family="Arial, sans-serif" font-size="26" font-weight="700" fill="#ffffff">PeoplePulse</text>
+  <text x="44" y="125" font-family="Arial, sans-serif" font-size="12" letter-spacing="2" fill="#75a0c9">WORKFORCE INTELLIGENCE</text>
+  <g font-family="Arial, sans-serif" font-size="16" fill="#a8bdd7">
+    <rect x="38" y="158" width="192" height="45" rx="10" fill="#18345c"/>
+    <text x="58" y="187" fill="#ffffff">Executive overview</text>
+    <text x="58" y="237">Headcount</text>
+    <text x="58" y="281">Attrition</text>
+    <text x="58" y="325">Recruitment</text>
+    <text x="58" y="369">Pipeline health</text>
+    <text x="58" y="413">Data quality</text>
+    <text x="58" y="457">Governance</text>
+  </g>
+  <circle cx="54" cy="604" r="6" fill="#33d6c5"/>
+  <text x="70" y="609" font-family="Arial, sans-serif" font-size="13" fill="#a8bdd7">Trusted data - refreshed 02:18 UTC</text>
+
+  <text x="280" y="68" font-family="Arial, sans-serif" font-size="29" font-weight="700" fill="#ffffff">Executive workforce overview</text>
+  <text x="280" y="94" font-family="Arial, sans-serif" font-size="14" fill="#8ea9c8">Aggregate people metrics with governed definitions</text>
+
+  <g font-family="Arial, sans-serif">
+    <g transform="translate(280 124)">
+      <rect width="204" height="108" rx="15" fill="#ffffff"/>
+      <text x="18" y="30" font-size="12" letter-spacing="1" fill="#56708d">TOTAL HEADCOUNT</text>
+      <text x="18" y="73" font-size="34" font-weight="700" fill="#142746">4,860</text>
+      <text x="142" y="75" font-size="13" fill="#168f82">+3.2%</text>
+    </g>
+    <g transform="translate(500 124)">
+      <rect width="204" height="108" rx="15" fill="#ffffff"/>
+      <text x="18" y="30" font-size="12" letter-spacing="1" fill="#56708d">ATTRITION RATE</text>
+      <text x="18" y="73" font-size="34" font-weight="700" fill="#142746">10.6%</text>
+      <text x="143" y="75" font-size="13" fill="#ca5268">+0.4%</text>
+    </g>
+    <g transform="translate(720 124)">
+      <rect width="204" height="108" rx="15" fill="#ffffff"/>
+      <text x="18" y="30" font-size="12" letter-spacing="1" fill="#56708d">NEW HIRES</text>
+      <text x="18" y="73" font-size="34" font-weight="700" fill="#142746">612</text>
+      <text x="141" y="75" font-size="13" fill="#168f82">YTD</text>
+    </g>
+    <g transform="translate(940 124)">
+      <rect width="228" height="108" rx="15" fill="#ffffff"/>
+      <text x="18" y="30" font-size="12" letter-spacing="1" fill="#56708d">DATA QUALITY</text>
+      <text x="18" y="73" font-size="34" font-weight="700" fill="#142746">98.6</text>
+      <rect x="118" y="56" width="88" height="10" rx="5" fill="#dfe8f0"/>
+      <rect x="118" y="56" width="82" height="10" rx="5" fill="url(#accent)"/>
+    </g>
+  </g>
+
+  <g transform="translate(280 253)">
+    <rect width="562" height="374" rx="18" fill="#ffffff"/>
+    <text x="24" y="38" font-family="Arial, sans-serif" font-size="17" font-weight="700" fill="#142746">Headcount trend</text>
+    <text x="452" y="38" font-family="Arial, sans-serif" font-size="12" fill="#6b8199">LAST 12 MONTHS</text>
+    <line x1="55" y1="314" x2="525" y2="314" stroke="#dce6ef"/>
+    <line x1="55" y1="235" x2="525" y2="235" stroke="#edf2f7"/>
+    <line x1="55" y1="156" x2="525" y2="156" stroke="#edf2f7"/>
+    <line x1="55" y1="77" x2="525" y2="77" stroke="#edf2f7"/>
+    <path d="M58 276 C115 269, 126 245, 174 251 S248 211, 294 220 S369 170, 412 184 S477 130, 523 118" fill="none" stroke="#2bbfaf" stroke-width="5" stroke-linecap="round"/>
+    <path d="M58 276 C115 269, 126 245, 174 251 S248 211, 294 220 S369 170, 412 184 S477 130, 523 118 L523 314 L58 314 Z" fill="#2bbfaf" opacity=".10"/>
+    <g fill="#2bbfaf">
+      <circle cx="58" cy="276" r="5"/><circle cx="174" cy="251" r="5"/><circle cx="294" cy="220" r="5"/><circle cx="412" cy="184" r="5"/><circle cx="523" cy="118" r="5"/>
+    </g>
+    <g font-family="Arial, sans-serif" font-size="11" fill="#758ba3">
+      <text x="48" y="340">Aug</text><text x="153" y="340">Nov</text><text x="279" y="340">Feb</text><text x="397" y="340">May</text><text x="507" y="340">Jul</text>
+    </g>
+  </g>
+
+  <g transform="translate(862 253)">
+    <rect width="306" height="178" rx="18" fill="#ffffff"/>
+    <text x="22" y="35" font-family="Arial, sans-serif" font-size="16" font-weight="700" fill="#142746">Headcount by function</text>
+    <g font-family="Arial, sans-serif" font-size="11" fill="#5c748d">
+      <text x="22" y="72">Engineering</text><rect x="108" y="62" width="168" height="12" rx="6" fill="#e6eef5"/><rect x="108" y="62" width="145" height="12" rx="6" fill="#33c8b9"/>
+      <text x="22" y="103">Sales</text><rect x="108" y="93" width="168" height="12" rx="6" fill="#e6eef5"/><rect x="108" y="93" width="112" height="12" rx="6" fill="#559dec"/>
+      <text x="22" y="134">Operations</text><rect x="108" y="124" width="168" height="12" rx="6" fill="#e6eef5"/><rect x="108" y="124" width="84" height="12" rx="6" fill="#8b7be8"/>
+    </g>
+  </g>
+  <g transform="translate(862 449)">
+    <rect width="306" height="178" rx="18" fill="#ffffff"/>
+    <text x="22" y="35" font-family="Arial, sans-serif" font-size="16" font-weight="700" fill="#142746">Pipeline confidence</text>
+    <circle cx="89" cy="105" r="42" fill="none" stroke="#e3ebf2" stroke-width="13"/>
+    <path d="M89 63 A42 42 0 1 1 58 133" fill="none" stroke="#32c7b8" stroke-width="13" stroke-linecap="round"/>
+    <text x="69" y="111" font-family="Arial, sans-serif" font-size="18" font-weight="700" fill="#142746">99%</text>
+    <circle cx="168" cy="79" r="5" fill="#32c7b8"/>
+    <text x="182" y="84" font-family="Arial, sans-serif" font-size="12" fill="#5c748d">Quality passed</text>
+    <circle cx="168" cy="112" r="5" fill="#559dec"/>
+    <text x="182" y="117" font-family="Arial, sans-serif" font-size="12" fill="#5c748d">Freshness healthy</text>
+    <circle cx="168" cy="145" r="5" fill="#8b7be8"/>
+    <text x="182" y="150" font-family="Arial, sans-serif" font-size="12" fill="#5c748d">Counts reconciled</text>
+  </g>
+</svg>

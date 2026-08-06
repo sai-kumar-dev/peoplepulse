@@ -1,0 +1,116 @@
+name: pull-request
+
+on:
+  pull_request:
+  push:
+    branches: ["main"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  python-quality:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install quality dependencies
+        run: python -m pip install --upgrade pip && pip install -e ".[dev]"
+      - name: Ruff format
+        run: ruff format --check .
+      - name: Ruff lint
+        run: ruff check .
+      - name: Mypy
+        run: mypy .
+      - name: Pytest with coverage
+        run: pytest
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: python-coverage
+          path: coverage.xml
+
+  dbt:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: peoplepulse
+          POSTGRES_PASSWORD: peoplepulse
+          POSTGRES_DB: people_warehouse
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U peoplepulse -d people_warehouse"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      DBT_PROFILES_DIR: dbt
+      DBT_HOST: localhost
+      DBT_PORT: "5432"
+      DBT_USER: peoplepulse
+      DBT_PASSWORD: peoplepulse
+      DBT_DATABASE: people_warehouse
+      DBT_SCHEMA: analytics
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: python -m pip install --upgrade pip && pip install -e ".[dbt]"
+      - name: Bootstrap raw schemas
+        run: python scripts/bootstrap_ci_database.py
+      - name: dbt dependencies
+        working-directory: dbt
+        run: dbt deps
+      - name: dbt parse
+        working-directory: dbt
+        run: dbt parse --target local
+      - name: dbt compile
+        working-directory: dbt
+        run: dbt compile --target local
+      - name: dbt build
+        working-directory: dbt
+        run: dbt build --target local
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: dbt-artifacts
+          path: |
+            dbt/target/manifest.json
+            dbt/target/run_results.json
+
+  docker-and-security:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate Compose
+        run: docker compose config --quiet
+      - name: Build application images
+        run: docker compose build api dashboard
+      - name: Secret scan
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Filesystem vulnerability scan
+        uses: aquasecurity/trivy-action@0.29.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          severity: CRITICAL,HIGH
+          exit-code: "1"
+          ignore-unfixed: true
+

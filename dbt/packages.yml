@@ -1,0 +1,3 @@
+# PeoplePulse owns its small portability/test macro surface so local builds do
+# not require a package registry. Add pinned packages here as the project grows.
+packages: []

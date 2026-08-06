@@ -1,0 +1,4 @@
+[console_scripts]
+peoplepulse-generate = data_generator.generate:main
+peoplepulse-ingest = ingestion.cli:main
+peoplepulse-quality = peoplepulse.quality.cli:main

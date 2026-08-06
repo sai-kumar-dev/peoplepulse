@@ -1,0 +1,59 @@
+name: peoplepulse
+version: "1.0.0"
+config-version: 2
+
+profile: peoplepulse
+
+model-paths: ["models"]
+analysis-paths: ["analyses"]
+test-paths: ["tests"]
+seed-paths: ["seeds"]
+macro-paths: ["macros"]
+snapshot-paths: ["snapshots"]
+
+target-path: target
+clean-targets:
+  - target
+  - dbt_packages
+
+require-dbt-version: [">=1.7.0", "<2.0.0"]
+
+vars:
+  snapshot_date: null
+  pipeline_freshness_warn_hours: 24
+  pipeline_freshness_error_hours: 48
+
+models:
+  peoplepulse:
+    +persist_docs:
+      relation: true
+      columns: true
+    staging:
+      +materialized: view
+      +schema: staging
+      +tags: ["staging", "hourly"]
+    intermediate:
+      +materialized: ephemeral
+      +schema: intermediate
+      +tags: ["intermediate", "hourly"]
+    core:
+      +schema: core
+      +tags: ["core", "daily"]
+    marts:
+      +materialized: table
+      +schema: marts
+      +tags: ["marts", "daily"]
+
+seeds:
+  peoplepulse:
+    +schema: reference
+    +quote_columns: false
+
+snapshots:
+  peoplepulse:
+    +target_schema: snapshots
+
+tests:
+  peoplepulse:
+    +store_failures: true
+    +schema: data_quality

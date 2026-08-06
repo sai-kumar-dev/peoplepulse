@@ -1,0 +1,282 @@
+version: 2
+
+models:
+  - name: mart_headcount
+    description: >
+      Governed daily workforce inventory aggregated by department, location, job
+      level, employment type, and work arrangement. Headcount includes active and
+      leave statuses whose employment dates span the snapshot date.
+    meta:
+      owner: people-analytics
+      refresh_frequency: daily
+      data_classification: internal
+      grain: snapshot_date + department + location + job_level + employment_type + work_arrangement
+      known_caveat: Trends contain only dates captured or explicitly backfilled in the snapshot fact.
+    tests:
+      - unique_combination_of_columns:
+          arguments:
+            combination_of_columns:
+              - snapshot_date
+              - department_sk
+              - location_id
+              - job_level
+              - employment_type
+              - work_arrangement
+    columns:
+      - name: snapshot_date
+        description: Calendar date represented by the aggregate.
+        tests: [not_null]
+      - name: department_sk
+        description: Conformed department surrogate key.
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_department')
+                field: department_sk
+      - name: department_name
+        description: Display name of the department.
+        tests: [not_null]
+      - name: location_id
+        description: Location business key or __UNKNOWN__.
+        tests: [not_null]
+      - name: job_level
+        description: Normalized job level or unknown.
+        tests: [not_null]
+      - name: employment_type
+        description: Normalized employment type or unknown.
+        tests: [not_null]
+      - name: work_arrangement
+        description: Normalized work arrangement or unknown.
+        tests: [not_null]
+      - name: headcount
+        description: Employees meeting the governed headcount definition.
+        tests: [not_null, non_negative]
+      - name: active_employees
+        description: Employees whose source status is active.
+        tests: [not_null, non_negative]
+      - name: employees_on_leave
+        description: Employees whose source status is leave.
+        tests: [not_null, non_negative]
+      - name: inactive_employees
+        description: Employees whose source status is terminated or inactive.
+        tests: [not_null, non_negative]
+      - name: distinct_employees
+        description: Distinct employee business keys contributing to headcount.
+        tests: [not_null, non_negative]
+      - name: average_tenure_years
+        description: Average completed tenure among employees in headcount.
+      - name: refreshed_at
+        description: Latest contributing snapshot load timestamp.
+        tests: [not_null]
+
+  - name: mart_attrition
+    description: >
+      Monthly department attrition metrics. Monthly rate equals terminations
+      divided by average observed daily headcount; annualized rate multiplies the
+      numerator by twelve. Null rates indicate no observed denominator.
+    meta:
+      owner: people-analytics
+      refresh_frequency: daily
+      data_classification: internal
+      grain: metric_month + department_sk
+      known_caveat: Average headcount uses captured snapshot days, not imputed dates.
+    tests:
+      - unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [metric_month, department_sk]
+    columns:
+      - name: metric_month
+        description: First day of the calendar month.
+        tests: [not_null]
+      - name: department_sk
+        description: Conformed department surrogate key.
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_department')
+                field: department_sk
+      - name: department_name
+        description: Business-facing department name.
+        tests: [not_null]
+      - name: terminations
+        description: All separation events in the month.
+        tests: [not_null, non_negative]
+      - name: voluntary_terminations
+        description: Employee-initiated separation events.
+        tests: [not_null, non_negative]
+      - name: involuntary_terminations
+        description: Non-voluntary separation events.
+        tests: [not_null, non_negative]
+      - name: average_headcount
+        description: Mean department headcount across observed snapshot dates.
+      - name: ending_observed_headcount
+        description: Maximum observed daily headcount retained as a directional inventory metric.
+      - name: observed_snapshot_days
+        description: Number of snapshot dates contributing to the denominator.
+        tests: [not_null, non_negative]
+      - name: monthly_attrition_rate
+        description: Monthly terminations divided by average observed headcount.
+      - name: annualized_attrition_rate
+        description: Monthly rate multiplied by twelve; not a rolling twelve-month rate.
+      - name: voluntary_attrition_share
+        description: Voluntary terminations divided by all terminations.
+      - name: average_tenure_years_at_exit
+        description: Average completed tenure of employees who separated in the month.
+      - name: refreshed_at
+        description: UTC model build timestamp.
+        tests: [not_null]
+
+  - name: mart_workforce_summary
+    description: >
+      Executive workforce KPI row per available snapshot date, combining workforce
+      inventory, month/year-to-date lifecycle events, tenure, and the current
+      weighted data-quality score.
+    meta:
+      owner: people-analytics
+      refresh_frequency: daily
+      data_classification: internal
+      grain: snapshot_date
+    columns:
+      - name: snapshot_date
+        description: Calendar date represented by the KPI row.
+        tests: [not_null, unique]
+      - name: total_headcount
+        description: Governed total workforce headcount.
+        tests: [not_null, non_negative]
+      - name: active_employees
+        description: Employees in active status.
+        tests: [not_null, non_negative]
+      - name: employees_on_leave
+        description: Employees in leave status.
+        tests: [not_null, non_negative]
+      - name: inactive_employees
+        description: Employees in terminated or inactive status represented in the snapshot.
+        tests: [not_null, non_negative]
+      - name: represented_departments
+        description: Count of department surrogate keys present in the snapshot.
+        tests: [not_null, non_negative]
+      - name: average_tenure_years
+        description: Average completed tenure among headcount employees.
+      - name: hires_today
+        description: Hire events on snapshot date.
+        tests: [not_null, non_negative]
+      - name: hires_month_to_date
+        description: Hire events from calendar-month start through snapshot date.
+        tests: [not_null, non_negative]
+      - name: hires_year_to_date
+        description: Hire events from calendar-year start through snapshot date.
+        tests: [not_null, non_negative]
+      - name: terminations_today
+        description: Separation events on snapshot date.
+        tests: [not_null, non_negative]
+      - name: terminations_month_to_date
+        description: Separation events from calendar-month start through snapshot date.
+        tests: [not_null, non_negative]
+      - name: terminations_year_to_date
+        description: Separation events from calendar-year start through snapshot date.
+        tests: [not_null, non_negative]
+      - name: voluntary_terminations_year_to_date
+        description: Employee-initiated separation events year to date.
+        tests: [not_null, non_negative]
+      - name: year_to_date_attrition_rate
+        description: Year-to-date terminations divided by current headcount.
+      - name: data_quality_score
+        description: Weighted percentage of staged records passing configured quality checks.
+        tests: [not_null, non_negative]
+      - name: snapshot_loaded_at
+        description: Latest contributing snapshot build timestamp.
+        tests: [not_null]
+      - name: refreshed_at
+        description: UTC model build timestamp.
+        tests: [not_null]
+
+  - name: mart_data_quality_summary
+    description: >
+      Operational summary of deterministic staging business-rule checks. Critical
+      failures are labelled failed; non-critical failures are labelled warning.
+      dbt's persisted test-failure relations remain the row-level diagnostic source.
+    meta:
+      owner: data-platform
+      refresh_frequency: every_pipeline_run
+      data_classification: internal
+      grain: check_id
+    columns:
+      - name: check_id
+        description: Stable namespaced quality-check identifier.
+        tests: [not_null, unique]
+      - name: source_entity
+        description: Source entity assessed by the check.
+        tests: [not_null]
+      - name: check_name
+        description: Human-readable business rule.
+        tests: [not_null]
+      - name: severity
+        description: Operational impact of failure.
+        tests:
+          - accepted_values:
+              arguments:
+                values: [critical, warning]
+      - name: records_tested
+        description: Staged records included in the check.
+        tests: [not_null, non_negative]
+      - name: failure_count
+        description: Records that failed the check.
+        tests: [not_null, non_negative]
+      - name: passed_count
+        description: Records that passed the check.
+        tests: [not_null, non_negative]
+      - name: pass_rate
+        description: Passed records divided by tested records; empty inputs are scored 1.0.
+        tests: [not_null, non_negative]
+      - name: check_status
+        description: Passed, warning, or failed operational state.
+        tests:
+          - accepted_values:
+              arguments:
+                values: [passed, warning, failed]
+      - name: evaluated_at
+        description: UTC model evaluation timestamp.
+        tests: [not_null]
+
+  - name: mart_pipeline_health
+    description: >
+      Per-source-entity load freshness and staged-volume view. Thresholds are
+      controlled by pipeline_freshness_warn_hours and
+      pipeline_freshness_error_hours dbt variables.
+    meta:
+      owner: data-platform
+      refresh_frequency: every_pipeline_run
+      data_classification: internal
+      grain: source_name + entity_name
+    tests:
+      - unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [source_name, entity_name]
+    columns:
+      - name: source_name
+        description: Logical upstream source name.
+        tests: [not_null]
+      - name: entity_name
+        description: Logical source entity.
+        tests: [not_null]
+      - name: latest_ingested_at
+        description: Most recent raw load timestamp represented in staging.
+      - name: freshness_lag_hours
+        description: Decimal hours between the latest load and model evaluation.
+      - name: staged_record_count
+        description: Delivery-deduplicated staged rows.
+        tests: [not_null, non_negative]
+      - name: observed_batch_count
+        description: Distinct ingestion batches represented by current staging rows.
+        tests: [not_null, non_negative]
+      - name: health_status
+        description: Healthy, warning, failed, or unavailable based on configured freshness.
+        tests:
+          - accepted_values:
+              arguments:
+                values: [healthy, warning, failed, unavailable]
+      - name: evaluated_at
+        description: UTC model evaluation timestamp.
+        tests: [not_null]

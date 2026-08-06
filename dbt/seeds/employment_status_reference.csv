@@ -1,0 +1,7 @@
+employment_status,is_headcount_status,is_terminal_status,display_order
+active,true,false,1
+leave,true,false,2
+terminated,false,true,3
+inactive,false,true,4
+unknown,false,false,99
+

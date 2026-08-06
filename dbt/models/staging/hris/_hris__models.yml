@@ -1,0 +1,293 @@
+version: 2
+
+models:
+  - name: stg_hris__departments
+    description: >
+      Normalized, delivery-deduplicated department versions from HRIS. The grain
+      is one department business version per source effective timestamp.
+    meta:
+      owner: people-analytics-data-engineering
+      refresh_frequency: hourly
+      data_classification: internal
+      grain: department_id + source effective timestamp
+    columns:
+      - name: department_id
+        description: Normalized department business key.
+        tests:
+          - not_null
+      - name: department_name
+        description: Business-facing department name.
+        tests:
+          - not_null
+      - name: parent_department_id
+        description: Business key of the parent department; null for top-level departments.
+      - name: cost_center_id
+        description: Cost center associated with this department version.
+      - name: created_at
+        description: Source creation timestamp.
+      - name: updated_at
+        description: Source last-update timestamp used for version ordering.
+      - name: source_system
+        description: Normalized origin system code.
+        tests:
+          - not_null
+      - name: ingested_at
+        description: UTC raw-load timestamp.
+        tests:
+          - not_null
+      - name: batch_id
+        description: Ingestion batch identifier retained for lineage.
+        tests:
+          - not_null
+      - name: source_record_hash
+        description: Deterministic hash of normalized business attributes.
+        tests:
+          - not_null
+      - name: is_valid_record
+        description: True when required department attributes are populated.
+        tests:
+          - accepted_values:
+              arguments:
+                values: [true]
+                quote: false
+
+  - name: stg_hris__employees
+    description: >
+      Normalized employee master history with repeated batch deliveries removed.
+      This restricted model retains PII for controlled warehouse processing; marts
+      never select direct contact or birth-date fields.
+    meta:
+      owner: people-analytics-data-engineering
+      refresh_frequency: hourly
+      data_classification: restricted
+      contains_pii: true
+      grain: employee_id + source effective timestamp
+    tests:
+      - valid_employment_dates:
+          arguments:
+            hire_date_column: hire_date
+            termination_date_column: termination_date
+    columns:
+      - name: employee_id
+        description: Stable employee business key.
+        tests:
+          - not_null
+      - name: legal_entity_id
+        description: Employing legal entity business key.
+      - name: first_name
+        description: Legal first name; direct identifier.
+        meta: {sensitivity: restricted, pii: true}
+      - name: last_name
+        description: Legal last name; direct identifier.
+        meta: {sensitivity: restricted, pii: true}
+      - name: preferred_name
+        description: Employee preferred name; direct identifier.
+        meta: {sensitivity: restricted, pii: true}
+      - name: date_of_birth
+        description: Employee date of birth; confidential demographic PII.
+        meta: {sensitivity: restricted, pii: true}
+      - name: gender
+        description: Normalized self-described gender category; unknown includes missing and unsupported values.
+        meta: {sensitivity: confidential, pii: true}
+        tests:
+          - accepted_values:
+              arguments:
+                values: [female, male, non_binary, not_disclosed, unknown]
+      - name: email
+        description: Lower-cased employee email; direct contact identifier.
+        meta: {sensitivity: restricted, pii: true}
+      - name: phone
+        description: Employee phone number; direct contact identifier.
+        meta: {sensitivity: restricted, pii: true}
+      - name: hire_date
+        description: Current employment spell start date.
+        tests:
+          - not_null
+      - name: termination_date
+        description: Current employment spell termination date when applicable.
+      - name: employment_status
+        description: Canonical lifecycle status; unsupported values map to unknown.
+        tests:
+          - accepted_values:
+              arguments:
+                values: [active, leave, terminated, inactive, unknown]
+      - name: employment_type
+        description: Canonical employment relationship category.
+        tests:
+          - accepted_values:
+              arguments:
+                values: [full_time, part_time, contract, intern, unknown]
+      - name: manager_employee_id
+        description: Employee business key of the assigned manager.
+      - name: department_id
+        description: Assigned department business key.
+        tests:
+          - relationships:
+              arguments:
+                to: ref('stg_hris__departments')
+                field: department_id
+              config:
+                severity: warn
+      - name: job_id
+        description: Assigned job business key.
+      - name: job_level
+        description: Normalized organizational level code.
+      - name: location_id
+        description: Assigned work-location business key.
+      - name: cost_center_id
+        description: Charged cost-center business key.
+      - name: worker_category
+        description: Canonical worker category.
+        tests:
+          - accepted_values:
+              arguments:
+                values: [employee, contractor, contingent, intern, unknown]
+      - name: work_arrangement
+        description: Canonical remote, hybrid, or on-site arrangement.
+        tests:
+          - accepted_values:
+              arguments:
+                values: [remote, hybrid, on_site, unknown]
+      - name: created_at
+        description: Source record creation timestamp.
+      - name: updated_at
+        description: Source record last-update timestamp.
+      - name: source_system
+        description: Normalized origin system code.
+        tests:
+          - not_null
+      - name: ingested_at
+        description: UTC raw-load timestamp.
+        tests:
+          - not_null
+      - name: batch_id
+        description: Ingestion batch identifier retained for lineage.
+        tests:
+          - not_null
+      - name: source_record_hash
+        description: Deterministic hash across normalized employee attributes.
+        tests:
+          - not_null
+      - name: is_valid_employment_dates
+        description: False when the employee key or hire date is missing, or termination precedes hire.
+        tests:
+          - accepted_values:
+              arguments:
+                values: [true]
+                quote: false
+      - name: is_valid_employment_status
+        description: False when the raw status could not be mapped to a canonical status.
+      - name: is_valid_employment_type
+        description: False when the raw type could not be mapped to a canonical type.
+
+  - name: stg_hris__hires
+    description: >
+      Normalized and idempotently deduplicated hire and rehire events. Grain is
+      one row per hire_event_id.
+    meta:
+      owner: people-analytics-data-engineering
+      refresh_frequency: hourly
+      data_classification: confidential
+      grain: hire_event_id
+    columns:
+      - name: hire_event_id
+        description: Stable hire event identifier.
+        tests: [not_null, unique]
+      - name: employee_id
+        description: Employee business key.
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_hris__employees')
+                field: employee_id
+      - name: hire_date
+        description: Business-effective hire or rehire date.
+        tests: [not_null]
+      - name: hire_type
+        description: Canonical hire event category.
+        tests:
+          - accepted_values:
+              arguments:
+                values: [external, new_hire, rehire, conversion, acquisition, unknown]
+      - name: department_id
+        description: Department business key at hire time.
+      - name: job_id
+        description: Job business key at hire time.
+      - name: location_id
+        description: Location business key at hire time.
+      - name: requisition_id
+        description: Recruiting requisition that produced the hire, when known.
+      - name: source_record_hash
+        description: Deterministic hash of normalized event attributes.
+        tests: [not_null]
+      - name: ingested_at
+        description: UTC raw-load timestamp.
+        tests: [not_null]
+      - name: batch_id
+        description: Ingestion batch identifier.
+      - name: source_system
+        description: Normalized origin system code.
+      - name: is_valid_record
+        description: False for missing keys, missing dates, or future-dated hire events.
+        tests:
+          - accepted_values:
+              arguments:
+                values: [true]
+                quote: false
+
+  - name: stg_hris__terminations
+    description: >
+      Normalized and idempotently deduplicated employment termination events.
+      Grain is one row per termination_event_id.
+    meta:
+      owner: people-analytics-data-engineering
+      refresh_frequency: hourly
+      data_classification: confidential
+      grain: termination_event_id
+    columns:
+      - name: termination_event_id
+        description: Stable termination event identifier.
+        tests: [not_null, unique]
+      - name: employee_id
+        description: Employee business key.
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_hris__employees')
+                field: employee_id
+      - name: termination_date
+        description: Business-effective final employment date.
+        tests: [not_null]
+      - name: termination_type
+        description: Canonical separation category.
+        tests:
+          - accepted_values:
+              arguments:
+                values: [voluntary, involuntary, retirement, other, unknown]
+      - name: termination_reason
+        description: Normalized source reason; potentially sensitive free text.
+        meta: {sensitivity: confidential, pii: false}
+      - name: is_voluntary
+        description: True for employee-initiated separation.
+        tests: [not_null]
+      - name: department_id
+        description: Department business key supplied on the event.
+      - name: source_record_hash
+        description: Deterministic hash of normalized event attributes.
+        tests: [not_null]
+      - name: ingested_at
+        description: UTC raw-load timestamp.
+        tests: [not_null]
+      - name: batch_id
+        description: Ingestion batch identifier.
+      - name: source_system
+        description: Normalized origin system code.
+      - name: is_valid_record
+        description: False when required event identifiers or dates are missing.
+        tests:
+          - accepted_values:
+              arguments:
+                values: [true]
+                quote: false

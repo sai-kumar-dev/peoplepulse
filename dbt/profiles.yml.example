@@ -1,0 +1,26 @@
+# Copy this file to ~/.dbt/profiles.yml, or use the checked-in environment-driven
+# profile with: dbt --project-dir dbt --profiles-dir dbt <command>
+peoplepulse:
+  target: local
+  outputs:
+    local:
+      type: postgres
+      host: localhost
+      port: 5434
+      user: peoplepulse
+      password: peoplepulse
+      dbname: people_warehouse
+      schema: analytics
+      threads: 4
+    snowflake:
+      type: snowflake
+      account: "{{ env_var('SNOWFLAKE_ACCOUNT') }}"
+      user: "{{ env_var('SNOWFLAKE_USER') }}"
+      password: "{{ env_var('SNOWFLAKE_PASSWORD') }}"
+      role: PEOPLEPULSE_TRANSFORMER
+      database: PEOPLEPULSE
+      warehouse: PEOPLEPULSE_TRANSFORMING
+      schema: ANALYTICS
+      threads: 8
+      client_session_keep_alive: false
+      query_tag: peoplepulse_dbt

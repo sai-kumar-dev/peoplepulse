@@ -1,0 +1,39 @@
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.pytest-*/
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
+.venv/
+venv/
+
+# Runtime data
+.env
+data/generated/
+data/checkpoints/
+data/dead_letter/
+logs/
+artifacts/
+*.db
+*.sqlite
+*.sqlite3
+
+# dbt
+dbt/target/
+dbt/logs/
+dbt/dbt_packages/
+
+# Airflow
+airflow/logs/
+airflow/airflow.db
+airflow/webserver_config.py
+
+# IDE / OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
