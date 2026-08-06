@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1.7
-FROM apache/airflow:2.10.5-python3.12
+FROM apache/airflow:3.3.0-python3.12
 
 USER root
 COPY --chown=airflow:root . /opt/peoplepulse
