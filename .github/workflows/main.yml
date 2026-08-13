@@ -24,7 +24,7 @@ jobs:
       - run: pytest
       - name: Build tagged API image
         run: docker build --target runtime -f infrastructure/docker/app.Dockerfile -t peoplepulse-api:${GITHUB_SHA} .
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: verification-reports
           path: |
